@@ -35,6 +35,7 @@
 
 namespace autoware::behavior_path_planner
 {
+// Constructor for PlannerManager class
 PlannerManager::PlannerManager(rclcpp::Node & node)
 : plugin_loader_(
     "autoware_behavior_path_planner",
@@ -43,14 +44,17 @@ PlannerManager::PlannerManager(rclcpp::Node & node)
   clock_(*node.get_clock()),
   last_valid_reference_path_(std::nullopt)
 {
+  // declare element in class
   current_route_lanelet_ = std::make_shared<std::optional<lanelet::ConstLanelet>>(std::nullopt);
   processing_time_.emplace("total_time", 0.0);
   debug_publisher_ptr_ = std::make_unique<DebugPublisher>(&node, "~/debug");
   state_publisher_ptr_ = std::make_unique<DebugPublisher>(&node, "~/debug");
 }
 
+// Load Plugin
 void PlannerManager::launchScenePlugin(rclcpp::Node & node, const std::string & name)
 {
+  // check if the plugin (in SceneModuleInterface) is available
   if (plugin_loader_.isClassAvailable(name)) {
     const auto plugin = plugin_loader_.createSharedInstance(name);
     plugin->init(&node);
@@ -68,22 +72,31 @@ void PlannerManager::launchScenePlugin(rclcpp::Node & node, const std::string & 
     processing_time_.emplace(plugin->name(), 0.0);
     RCLCPP_DEBUG_STREAM(node.get_logger(), "The scene plugin '" << name << "' is loaded.");
   } else {
+    // not available
     RCLCPP_ERROR_STREAM(node.get_logger(), "The scene plugin '" << name << "' is not available.");
   }
 }
 
+// add modules in slot_config to planner_manager_slots_ by using SubManager
 void PlannerManager::configureModuleSlot(
   const std::vector<std::vector<std::string>> & slot_configuration)
 {
+  // declare variable for collecting existing module in manager_ptrs_
   std::unordered_map<std::string, SceneModuleManagerPtr> registered_modules;
   for (const auto & manager_ptr : manager_ptrs_) {
     registered_modules[manager_ptr->name()] = manager_ptr;
   }
 
+  // for each slot, add sub_manager to planner_manager_slots (one slot = submanager has several modules)
+  // slot_configuration contains slot -> slot contains module
   for (const auto & slot : slot_configuration) {
+    // create submanager from the variables in class
     SubPlannerManager sub_manager(current_route_lanelet_, processing_time_, debug_info_);
     for (const auto & module_name : slot) {
+      // check if module in slot is in registered_module
       if (const auto it = registered_modules.find(module_name); it != registered_modules.end()) {
+        // if it exists add SceneModuleManager
+        // just add that manager_ptr into manager_ptrs_ (also, add module_priorities) of sub_manager
         sub_manager.addSceneModuleManager(it->second);
       } else {
         // TODO(Mamoru Sobue): use LOG
@@ -91,6 +104,7 @@ void PlannerManager::configureModuleSlot(
                   << std::endl;
       }
     }
+    // If once add module(s) -> add it to planner_manager_slots_ and log it
     if (sub_manager.getSceneModuleManager().size() != 0) {
       planner_manager_slots_.push_back(sub_manager);
       // TODO(Mamoru Sobue): use LOG
@@ -102,26 +116,38 @@ void PlannerManager::configureModuleSlot(
 
 BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & data)
 {
+  // set all processing time to 0
   resetProcessingTime();
   StopWatch<std::chrono::milliseconds> stop_watch;
+  // start ticking with label total_time
   stop_watch.tic("total_time");
+  // Automatically run at the end of run (can use processing_time_ and stop_watch)
   BOOST_SCOPE_EXIT((&processing_time_)(&stop_watch))
   {
+    // tock to get elapsed time and add to processing time
     processing_time_.at("total_time") += stop_watch.toc("total_time", true);
   }
   BOOST_SCOPE_EXIT_END;
 
+  // clear debug_info
   debug_info_.scene_status.clear();
   debug_info_.slot_status.clear();
 
+  // if current_route_lanelet_ exists -> skip
+  // if not, find the closest lane within the route from data->odom->pose and set current_route_lanelet to be it
   if (!current_route_lanelet_->has_value()) resetCurrentRouteLanelet(data);
 
+  // for all manager_ptr (m) in manager_ptrs -> setData to be data (PlannerData)
   std::for_each(
     manager_ptrs_.begin(), manager_ptrs_.end(), [&data](const auto & m) { m->setData(data); });
 
+  // check all slots in planner_manager_slots if
+  // any of slot has any element in approved_module_ptrs_ has status running or waiting_approval
+  // if at least one is satisfied = True -> all are not satisfied = False
   const bool is_any_approved_module_running = std::any_of(
     planner_manager_slots_.begin(), planner_manager_slots_.end(), [&](const auto & slot) {
       return slot.isAnyApprovedPred([](const auto & m) {
+        // status of element in approved_module_ptrs_
         const auto status = m->getCurrentStatus();
         return status == ModuleStatus::RUNNING || status == ModuleStatus::WAITING_APPROVAL;
       });
@@ -129,6 +155,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
 
   // IDLE is a state in which an execution has been requested but not yet approved.
   // once approved, it basically turns to running.
+  // same as above but change to candidate module and also check IDLE status
   const bool is_any_candidate_module_running_or_idle = std::any_of(
     planner_manager_slots_.begin(), planner_manager_slots_.end(), [](const auto & slot) {
       return slot.isAnyCandidatePred([](const auto & m) {
@@ -137,17 +164,24 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
                status == ModuleStatus::IDLE;
       });
     });
-
+  
+  // check if any module (both approved and candidate running)
   const bool is_any_module_running =
     is_any_approved_module_running || is_any_candidate_module_running_or_idle;
 
+  // find and set the closest lanelet within the route to current route lanelet
+  // if is_any_approved_module_running is false, 
+  // resetCurrentRouteLanelet will be called if could_calculate_closest_lanelet is false
   updateCurrentRouteLanelet(data, is_any_approved_module_running);
 
+  // check if ego is out of route
   const bool is_out_of_route = utils::isEgoOutOfRoute(
     data->self_odometry->pose.pose, current_route_lanelet_->value(), data->prev_modified_goal,
     data->route_handler);
 
+  // if no module is running and is out of range
   if (!is_any_module_running && is_out_of_route) {
+    // get output with path and reference path, being a centerline path to goal
     BehaviorModuleOutput result_output = utils::createGoalAroundPath(data);
     RCLCPP_WARN_THROTTLE(
       logger_, clock_, 5000,
@@ -158,9 +192,9 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
 
   SlotOutput result_output = SlotOutput{
     getReferencePath(data),
-    false,
-    false,
-    false,
+    false,      //is_upstream_candidate_exclusive
+    false,      //is_upstream_failed_approved
+    false,      //is_upstream_waiting_approved
   };
 
   for (auto & planner_manager_slot : planner_manager_slots_) {
@@ -175,17 +209,19 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
       result_output = planner_manager_slot.propagateWithExclusiveCandidate(data, result_output);
       debug_info_.slot_status.push_back(SlotStatus::UPSTREAM_EXCLUSIVE_CANDIDATE);
     } else {
+      // first round will pass here and reconfig result_output
       result_output = planner_manager_slot.propagateFull(data, result_output);
       debug_info_.slot_status.push_back(SlotStatus::NORMAL);
     }
   }
-
+  // update manager_ptr in manager_ptrs_
   std::for_each(manager_ptrs_.begin(), manager_ptrs_.end(), [](const auto & m) {
     m->updateObserver();
     m->publishRTCStatus();
     m->publish_planning_factors();
   });
 
+  // get the valid output
   generateCombinedDrivableArea(result_output.valid_output, data);
   return result_output.valid_output;
 }
