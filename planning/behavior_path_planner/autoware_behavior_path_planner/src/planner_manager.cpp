@@ -51,7 +51,7 @@ PlannerManager::PlannerManager(rclcpp::Node & node)
   state_publisher_ptr_ = std::make_unique<DebugPublisher>(&node, "~/debug");
 }
 
-// Load Plugin
+// Load Plugin (module) that is available and not yet registerd in manager_ptrs_
 void PlannerManager::launchScenePlugin(rclcpp::Node & node, const std::string & name)
 {
   // check if the plugin (in SceneModuleInterface) is available
@@ -69,6 +69,7 @@ void PlannerManager::launchScenePlugin(rclcpp::Node & node, const std::string & 
 
     // register
     manager_ptrs_.push_back(plugin);
+    // for adding key and value in map (unordered)
     processing_time_.emplace(plugin->name(), 0.0);
     RCLCPP_DEBUG_STREAM(node.get_logger(), "The scene plugin '" << name << "' is loaded.");
   } else {
@@ -231,6 +232,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
 void PlannerManager::generateCombinedDrivableArea(
   BehaviorModuleOutput & output, const std::shared_ptr<PlannerData> & data) const
 {
+  // check if output path is empty
   if (output.path.points.empty()) {
     RCLCPP_ERROR_STREAM(logger_, "[generateCombinedDrivableArea] Output path is empty!");
     return;
@@ -239,11 +241,14 @@ void PlannerManager::generateCombinedDrivableArea(
   const auto & di = output.drivable_area_info;
   constexpr double epsilon = 1e-3;
 
+  //  check if driving forward (since it returns optional -> need to get value)
   const auto is_driving_forward_opt = autoware::motion_utils::isDrivingForward(output.path.points);
   const bool is_driving_forward = is_driving_forward_opt ? *is_driving_forward_opt : true;
 
+  // check for pull over
   if (epsilon < std::abs(di.drivable_margin)) {
     // for single free space pull over
+    // gen drivable area along the path points following the offet (will be calculated)
     utils::generateDrivableArea(
       output.path, data->parameters.vehicle_length, di.drivable_margin, is_driving_forward);
   } else if (di.is_already_expanded) {
@@ -251,6 +256,8 @@ void PlannerManager::generateCombinedDrivableArea(
     utils::generateDrivableArea(
       output.path, di.drivable_lanes, false, false, false, data, is_driving_forward);
   } else {
+    // need to get more information to gen drivable area
+    // mod path to keep only points in drivable lanes
     const auto shorten_lanes = utils::cutOverlappedLanes(output.path, di.drivable_lanes);
 
     const auto & dp = data->drivable_area_expansion_parameters;

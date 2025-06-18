@@ -385,10 +385,16 @@ public:
 
   void configureModuleSlot(const std::vector<std::vector<std::string>> & slot_configuration);
 
+  /**
+   * @brief get approved modules
+   * @return all approved modules from all subPlannerManager from planner manager slots
+   */
   std::vector<SceneModulePtr> approved_modules() const
   {
     std::vector<SceneModulePtr> modules;
+    // planner_manager_slots contains severals subPlannerManager
     for (const auto & planner_manager_slot : planner_manager_slots_) {
+      // get approved_modules from subPlannerManager
       const auto & sub_modules = planner_manager_slot.approved_modules();
       std::copy(sub_modules.begin(), sub_modules.end(), std::back_inserter(modules));
     }
@@ -396,10 +402,16 @@ public:
     return modules;
   }
 
+  /**
+   * @brief get candidate modules
+   * @return all candidate modules from all subPlannerManager from planner manager slots
+   */
   std::vector<SceneModulePtr> candidate_modules() const
   {
     std::vector<SceneModulePtr> modules;
+    // planner_manager_slots contains severals *subPlannerManager*
     for (const auto & planner_manager_slot : planner_manager_slots_) {
+      // get candidate_modules from subPlannerManager
       const auto & sub_modules = planner_manager_slot.candidate_modules();
       std::copy(sub_modules.begin(), sub_modules.end(), std::back_inserter(modules));
     }
@@ -467,7 +479,7 @@ public:
     const auto size = approved_module_ptrs.size() + candidate_module_ptrs.size();
 
     ret.reserve(size);
-
+    // get the status and is_waiting_status for all modules (both approved and candidate)
     for (const auto & m : approved_module_ptrs) {
       auto s = std::make_shared<SceneModuleStatus>(m->name());
       s->is_waiting_approval = m->isWaitingApproval();
