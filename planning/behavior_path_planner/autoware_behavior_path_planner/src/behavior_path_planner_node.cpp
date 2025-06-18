@@ -33,6 +33,7 @@ using autoware::vehicle_info_utils::VehicleInfoUtils;
 using tier4_planning_msgs::msg::PathChangeModuleId;
 using DebugStringMsg = autoware_internal_debug_msgs::msg::StringStamped;
 
+// Class constructor inherited from Node with node name "behavior_path_planner"
 BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & node_options)
 : Node("behavior_path_planner", node_options),
   planning_factor_interface_{
@@ -41,13 +42,13 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
   using std::placeholders::_1;
   using std::chrono_literals::operator""ms;
 
-  // data_manager
+  // data_manager (initialize)
   {
     planner_data_ = std::make_shared<PlannerData>();
     planner_data_->init_parameters(*this);
   }
 
-  // publisher
+  // publisher (initialize)
   path_publisher_ = create_publisher<PathWithLaneId>("~/output/path", 1);
   turn_signal_publisher_ =
     create_publisher<TurnIndicatorsCommand>("~/output/turn_indicators_cmd", 1);
@@ -69,13 +70,17 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
   bound_publisher_ = create_publisher<MarkerArray>("~/debug/bound", 1);
 
   {
+    // set for creating publisher for manager later
     const std::string path_candidate_name_space = "/planning/path_candidate/";
     const std::string path_reference_name_space = "/planning/path_reference/";
 
     const std::lock_guard<std::mutex> lock(mutex_manager_);  // for planner_manager_
 
+    // set parameters (when launching -> contains module)
+    // when launch -> colcon run package node slots:="[skot1, slot2, slot3]"
     const auto slots = declare_parameter<std::vector<std::string>>("slots");
     /* cppcheck-suppress syntaxError */
+    // add modules into slot inside slot_config(with size of number of slot)
     std::vector<std::vector<std::string>> slot_configuration{slots.size()};
     for (size_t i = 0; i < slots.size(); ++i) {
       const auto & slot = slots.at(i);
@@ -85,20 +90,26 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
       }
     }
 
+    // make a copy of node config to PlannarManager Class (to use function in PlannerManager)
     planner_manager_ = std::make_shared<PlannerManager>(*this);
 
+    // get all launch_modules
     for (const auto & name : declare_parameter<std::vector<std::string>>("launch_modules")) {
       // workaround: Since ROS 2 can't get empty list, launcher set [''] on the parameter.
       if (name == "") {
         break;
       }
+      // add module into planner_manager into planner_manager.manager_ptrs
       planner_manager_->launchScenePlugin(*this, name);
     }
-
+    
+    // add slot_config (contain slot that contain modules) if it's registered (using launchScenePlugin)
     // NOTE: this needs to be after launchScenePlugin()
     planner_manager_->configureModuleSlot(slot_configuration);
 
+    // loop in all manager_ptrs_
     for (const auto & manager : planner_manager_->getSceneModuleManagers()) {
+      // create map with key: manager name and value: publisher (with namespace declared at the beginning)
       path_candidate_publishers_.emplace(
         manager->name(), create_publisher<Path>(path_candidate_name_space + manager->name(), 1));
       path_reference_publishers_.emplace(
@@ -106,10 +117,11 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     }
   }
 
+  // callback when set parameter
   m_set_param_res = this->add_on_set_parameters_callback(
     std::bind(&BehaviorPathPlannerNode::onSetParam, this, std::placeholders::_1));
 
-  // turn signal decider
+  // turn signal decider (set parameter)
   {
     const double turn_signal_intersection_search_distance =
       planner_data_->parameters.turn_signal_intersection_search_distance;
@@ -135,16 +147,19 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
 
 std::vector<std::string> BehaviorPathPlannerNode::getWaitingApprovalModules()
 {
+  // check all modules that have status waiting
   auto all_scene_module_ptr = planner_manager_->getSceneModuleStatus();
   std::vector<std::string> waiting_approval_modules;
   for (const auto & module : all_scene_module_ptr) {
     if (module->is_waiting_approval == true) {
+      // Extract modules with is_waiting_aprroval
       waiting_approval_modules.push_back(module->module_name);
     }
   }
   return waiting_approval_modules;
 }
 
+// get all modules with status RUNNING
 std::vector<std::string> BehaviorPathPlannerNode::getRunningModules()
 {
   auto all_scene_module_ptr = planner_manager_->getSceneModuleStatus();
@@ -157,6 +172,7 @@ std::vector<std::string> BehaviorPathPlannerNode::getRunningModules()
   return running_modules;
 }
 
+// get several data from the various subscriber
 void BehaviorPathPlannerNode::takeData()
 {
   // route
@@ -251,7 +267,7 @@ void BehaviorPathPlannerNode::takeData()
   }
 }
 
-// wait until mandatory data is ready
+// wait until mandatory data is ready (check all data that got from TakeData existence)
 bool BehaviorPathPlannerNode::isDataReady()
 {
   const auto missing = [this](const auto & name) {
@@ -298,6 +314,7 @@ bool BehaviorPathPlannerNode::isDataReady()
   return true;
 }
 
+// run node
 void BehaviorPathPlannerNode::run()
 {
   const auto stamp = this->now();
@@ -410,6 +427,7 @@ void BehaviorPathPlannerNode::run()
       get_logger(), *get_clock(), 5000, "behavior path output is empty! Stop publish.");
   }
 
+  // publish 
   publishSceneModuleDebugMsg(planner_manager_->getDebugMsg());
   publishPathCandidate(planner_manager_->getSceneModuleManagers(), planner_data_);
   publishPathReference(planner_manager_->getSceneModuleManagers(), planner_data_);
