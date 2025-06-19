@@ -451,6 +451,7 @@ void BehaviorPathPlannerNode::run()
 
   planner_manager_->print();
   planner_manager_->publishProcessingTime();
+  // Publish MARKER in MODULE
   planner_manager_->publishMarker();
   planner_manager_->publishVirtualWall();
   lk_manager.unlock();  // release planner_manager_
