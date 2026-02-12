@@ -255,6 +255,18 @@ lanelet::ConstLanelets generateBetweenEgoAndExpandedPullOverLanes(
   // ==========================================================================================
   const double ego_offset_to_closer_boundary =
     getOffsetToLanesBoundary(pull_over_lanes, ego_front_pose, left_side);
+  RCLCPP_WARN(
+    rclcpp::get_logger("generateBetweenEgoAndExpandedPullOverLanes"),
+    "There is something wrong here.");
+  RCLCPP_WARN(
+    rclcpp::get_logger("generateBetweenEgoAndExpandedPullOverLanes"), "outer_road_offset = %f.",
+    outer_road_offset);
+  RCLCPP_WARN(
+    rclcpp::get_logger("generateBetweenEgoAndExpandedPullOverLanes"), "inner_road_offset = %f.",
+    inner_road_offset);
+  RCLCPP_WARN(
+    rclcpp::get_logger("generateBetweenEgoAndExpandedPullOverLanes"),
+    "ego_offset_to_closer_boundary = %f.", ego_offset_to_closer_boundary);
   return left_side ? lanelet::utils::getExpandedLanelets(
                        pull_over_lanes, outer_road_offset,
                        ego_offset_to_closer_boundary - inner_road_offset)
