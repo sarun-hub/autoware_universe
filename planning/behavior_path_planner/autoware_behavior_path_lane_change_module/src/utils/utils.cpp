@@ -586,13 +586,18 @@ lanelet::BasicPolygon2d create_polygon(
   if (lanes.empty()) {
     return {};
   }
+  RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From create Polygon, prepared");
 
   const auto polygon_3d_opt = autoware::experimental::lanelet2_utils::get_polygon_from_arc_length(
     lanes, start_dist, end_dist);
+  RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From create Polygon, created");
 
   if (!polygon_3d_opt.has_value()) {
+    RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From create Polygon, empty");
+
     return {};
   }
+  RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From create Polygon, go");
 
   const auto & polygon_3d = polygon_3d_opt.value();
   return lanelet::utils::to2D(polygon_3d).basicPolygon();

@@ -263,11 +263,19 @@ bool IntersectionModule::checkStuckVehicleInIntersection(const PathLanelets & pa
       std::min(stuck_vehicle_detect_dist, length3d(path_lanelets.next.value()));
     target_polygon_length += next_arc_length;
   }
+
+  RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From check stuck, prepare");
+
   const auto target_polygon_opt = get_polygon_from_arc_length(targets, 0, target_polygon_length);
+  RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From check stuck, created");
 
   if (!target_polygon_opt.has_value()) {
+    RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From check stuck, empty");
+
     return false;
   }
+  RCLCPP_WARN(rclcpp::get_logger("debug_message"), "From check stuck, go");
+
   const auto & target_polygon = to2D(target_polygon_opt.value()).basicPolygon();
 
   for (const auto & p : target_polygon) {
