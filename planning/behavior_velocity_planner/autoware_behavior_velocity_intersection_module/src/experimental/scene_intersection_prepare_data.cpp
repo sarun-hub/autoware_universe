@@ -64,8 +64,9 @@ Result<IntersectionModule::BasicData, InternalError> IntersectionModule::prepare
     return make_err<IntersectionModule::BasicData, InternalError>(
       "Path has no interval on intersection lane " + std::to_string(lane_id_));
   }
-  const auto & lane_id_interval = lane_id_interval_opt.value();
-
+  const auto & [start_s, end_s] = lane_id_interval_opt.value();
+  // has some more interval offset
+  const autoware::experimental::trajectory::Interval & lane_id_interval{start_s, end_s + 0.2};
   internal_debug_data_.distance =
     lane_id_interval.end -
     autoware::experimental::trajectory::find_nearest_index(path, current_pose.position);
@@ -233,7 +234,7 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
 
   IntersectionStopLines intersection_stoplines;
   intersection_stoplines.first_attention_stopline =
-    first_footprint_inside_1st_attention_s_opt.value();
+    first_footprint_inside_1st_attention_s_opt.value() - 0.2;
 
   // (2) pass judge line position on interpolated path
   const auto & braking_dist = planning_utils::calcJudgeLineDistWithJerkLimit(
@@ -384,7 +385,7 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
       if (!stuck_stopline_s_opt) {
         return std::nullopt;
       }
-      stuck_stopline_s = stuck_stopline_s_opt.value() - stopline_margin;
+      stuck_stopline_s = stuck_stopline_s_opt.value() - 0.2 - stopline_margin;
     } else {
       stuck_stopline_s = lane_id_interval.start - (stopline_margin + baselink2front);
     }

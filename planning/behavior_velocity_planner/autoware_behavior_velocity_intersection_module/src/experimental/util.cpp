@@ -200,16 +200,29 @@ std::optional<double> getFirstIndexInsidePolygon(
   const Trajectory & path, const autoware::experimental::trajectory::Interval & interval,
   const lanelet::CompoundPolygon3d & polygon, const bool search_forward)
 {
+  // NOTE: if first point is already inside the polygon, returns nullopt
   const auto cropped_path =
     autoware::experimental::trajectory::crop(path, interval.start, interval.end);
   const auto polygon_2d = lanelet::utils::to2D(polygon);
 
   std::optional<double> first_index{};
   if (search_forward) {
+    const auto & p0 = path.compute(interval.start);
+    if (isPointInsidePolygon(p0, polygon_2d)) {
+      RCLCPP_INFO(
+        rclcpp::get_logger("getFirstIndexInsidePolygon"), "first point is in polygon return null");
+      return std::nullopt;
+    }
     first_index = autoware::experimental::trajectory::find_first_index_if(
       cropped_path,
       [&](const PathPointWithLaneId & p) { return isPointInsidePolygon(p, polygon_2d); });
   } else {
+    const auto & p0 = path.compute(interval.end);
+    if (isPointInsidePolygon(p0, polygon_2d)) {
+      RCLCPP_INFO(
+        rclcpp::get_logger("getFirstIndexInsidePolygon"), "last point is in polygon return null");
+      return std::nullopt;
+    }
     first_index = autoware::experimental::trajectory::find_last_index_if(
       cropped_path,
       [&](const PathPointWithLaneId & p) { return isPointInsidePolygon(p, polygon_2d); });
@@ -454,18 +467,19 @@ std::optional<double> findMaximumFootprintOvershootPosition(
     return std::nullopt;
   }
 
-  const auto cropped_path =
-    autoware::experimental::trajectory::crop(path, intersection_index.value(), path.length());
+  const auto & start_s = intersection_index.value();
+
+  const auto cropped_path = autoware::experimental::trajectory::crop(path, start_s, path.length());
 
   auto closest_dist = std::numeric_limits<double>::infinity();
-  std::optional<double> closest_s{std::nullopt};
+  double closest_s = -1;
 
   for (const auto & s : cropped_path.get_underlying_bases()) {
     const auto & base_pose = cropped_path.compute(s).point.pose;
     const auto footprint =
       autoware_utils::transform_vector(local_footprint, autoware_utils::pose2transform(base_pose));
     if (boost::geometry::intersects(footprint, *target_boundary)) {
-      return s;
+      return start_s + s;
     }
 
     auto footprint_to_boundary_distance = std::numeric_limits<double>::infinity();
@@ -476,15 +490,18 @@ std::optional<double> findMaximumFootprintOvershootPosition(
       }
     }
     if (footprint_to_boundary_distance < min_distance_threshold) {
-      return s;
+      return start_s + s;
     }
     if (footprint_to_boundary_distance < closest_dist) {
       closest_dist = footprint_to_boundary_distance;
       closest_s = s;
     }
   }
+  if (closest_s < 0) {
+    return std::nullopt;
+  }
 
-  return closest_s;
+  return start_s + closest_s;
 }
 
 std::optional<lanelet::ConstLanelet> generatePathLanelet(
@@ -493,7 +510,8 @@ std::optional<lanelet::ConstLanelet> generatePathLanelet(
 {
   lanelet::ConstPoints3d left_points{}, right_points{};
 
-  for (const auto & s : path.base_arange({start_s, end_s}, interval)) {
+  // not end inclusive (include if the last tick = end_s)
+  for (const auto & s : path.base_arange({start_s, end_s}, interval, false)) {
     const auto p = path.compute(s).point.pose;
     const auto yaw = autoware_utils_geometry::get_rpy(p).z;
     const auto left_x = p.position.x + width / 2 * std::sin(yaw);

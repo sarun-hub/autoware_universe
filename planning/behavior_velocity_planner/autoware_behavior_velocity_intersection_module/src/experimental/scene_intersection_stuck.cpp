@@ -152,15 +152,12 @@ std::optional<StuckStop> IntersectionModule::isStuckStatus(
         }
       }
       if (!stopline_s) {
-        if (default_stopline_s_opt) {
-          const auto & default_stopline_s = default_stopline_s_opt.value();
-          if (can_smoothly_stop_at(closest_s, default_stopline_s, planner_data)) {
-            stopline_s = default_stopline_s;
-          }
-        } else {
-          if (can_smoothly_stop_at(closest_s, first_attention_stopline_s, planner_data)) {
-            stopline_s = first_attention_stopline_s;
-          }
+        if (
+          default_stopline_s_opt &&
+          can_smoothly_stop_at(closest_s, default_stopline_s_opt.value(), planner_data)) {
+          stopline_s = default_stopline_s_opt.value();
+        } else if (can_smoothly_stop_at(closest_s, first_attention_stopline_s, planner_data)) {
+          stopline_s = first_attention_stopline_s;
         }
       }
       if (stopline_s) {
@@ -256,9 +253,8 @@ bool IntersectionModule::checkStuckVehicleInIntersection(
     return false;
   }
 
-  double target_polygon_length =
-    length3d(lanelet::LaneletSequence(path_lanelets.conflicting_interval_and_remaining));
   lanelet::ConstLanelets targets = path_lanelets.conflicting_interval_and_remaining;
+  double target_polygon_length = length3d(lanelet::LaneletSequence(targets));
   if (path_lanelets.next) {
     targets.push_back(path_lanelets.next.value());
     const double next_arc_length =
