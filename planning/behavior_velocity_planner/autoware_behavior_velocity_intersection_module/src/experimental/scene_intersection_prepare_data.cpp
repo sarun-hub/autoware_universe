@@ -442,8 +442,9 @@ static std::vector<std::deque<lanelet::ConstLanelet>> getPrecedingLaneletsUptoIn
       // remove prev_lanelet from preceding_lanelet_sequences
       continue;
     }
-    if (const std::string turn_direction = prev_lanelet.attributeOr("turn_direction", "else");
-        turn_direction == "left" || turn_direction == "right") {
+    if (
+      const std::string turn_direction = prev_lanelet.attributeOr("turn_direction", "else");
+      turn_direction == "left" || turn_direction == "right") {
       continue;
     }
 
@@ -474,8 +475,9 @@ static std::vector<lanelet::ConstLanelets> getPrecedingLaneletsUptoIntersection(
       // remove prev_lanelet from preceding_lanelet_sequences
       continue;
     }
-    if (const std::string turn_direction = prev_lanelet.attributeOr("turn_direction", "else");
-        turn_direction == "left" || turn_direction == "right") {
+    if (
+      const std::string turn_direction = prev_lanelet.attributeOr("turn_direction", "else");
+      turn_direction == "left" || turn_direction == "right") {
       continue;
     }
     // convert deque into vector
@@ -500,8 +502,9 @@ IntersectionLanelets IntersectionModule::generateObjectiveLanelets(
 
   // retrieve a stopline associated with a traffic light
   bool has_traffic_light = false;
-  if (const auto tl_reg_elems = assigned_lanelet.regulatoryElementsAs<lanelet::TrafficLight>();
-      tl_reg_elems.size() != 0) {
+  if (
+    const auto tl_reg_elems = assigned_lanelet.regulatoryElementsAs<lanelet::TrafficLight>();
+    tl_reg_elems.size() != 0) {
     const auto tl_reg_elem = tl_reg_elems.front();
     const auto stopline_opt = tl_reg_elem->stopLine();
     if (!!stopline_opt) has_traffic_light = true;

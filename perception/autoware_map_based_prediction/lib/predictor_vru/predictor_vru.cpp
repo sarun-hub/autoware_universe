@@ -149,6 +149,7 @@ void PredictorVru::setLaneletMap(std::shared_ptr<lanelet::LaneletMap> lanelet_ma
   crosswalks_.insert(crosswalks_.end(), walkways.begin(), walkways.end());
 
   fence_module_.buildFromMap(lanelet_map_ptr_);
+  road_boundary_module_.build_from_map(lanelet_map_ptr_);
 }
 
 void PredictorVru::loadCurrentCrosswalkUsers(const TrackedObjects & objects)
@@ -280,22 +281,24 @@ PredictedObject PredictorVru::getPredictedObjectAsCrosswalkUser(const TrackedObj
   if (crossing_crosswalk) {
     const auto edge_points = getCrosswalkEdgePoints(crossing_crosswalk.get());
 
-    if (history_manager_.hasPotentialToReachWithHistory(
-          mutable_object, edge_points.front_center_point, edge_points.front_right_point,
-          edge_points.front_left_point, std::numeric_limits<double>::max(),
-          params_.min_crosswalk_user_velocity,
-          params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
+    if (
+      history_manager_.hasPotentialToReachWithHistory(
+        mutable_object, edge_points.front_center_point, edge_points.front_right_point,
+        edge_points.front_left_point, std::numeric_limits<double>::max(),
+        params_.min_crosswalk_user_velocity,
+        params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
       PredictedPath predicted_path =
         path_generator_->generatePathToTargetPoint(mutable_object, edge_points.front_center_point);
       predicted_path.confidence = 1.0;
       predicted_object.kinematics.predicted_paths.push_back(predicted_path);
     }
 
-    if (history_manager_.hasPotentialToReachWithHistory(
-          mutable_object, edge_points.back_center_point, edge_points.back_right_point,
-          edge_points.back_left_point, std::numeric_limits<double>::max(),
-          params_.min_crosswalk_user_velocity,
-          params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
+    if (
+      history_manager_.hasPotentialToReachWithHistory(
+        mutable_object, edge_points.back_center_point, edge_points.back_right_point,
+        edge_points.back_left_point, std::numeric_limits<double>::max(),
+        params_.min_crosswalk_user_velocity,
+        params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
       PredictedPath predicted_path =
         path_generator_->generatePathToTargetPoint(mutable_object, edge_points.back_center_point);
       predicted_path.confidence = 1.0;
@@ -310,22 +313,24 @@ PredictedObject PredictorVru::getPredictedObjectAsCrosswalkUser(const TrackedObj
       closest_crosswalk_opt &&
       within_minimum_distance(obj_pose.position, closest_crosswalk_opt.value())) {
       const auto edge_points = getCrosswalkEdgePoints(closest_crosswalk_opt.value());
-      if (history_manager_.hasPotentialToReachWithHistory(
-            mutable_object, edge_points.front_center_point, edge_points.front_right_point,
-            edge_points.front_left_point, params_.prediction_time_horizon * 2.0,
-            params_.min_crosswalk_user_velocity,
-            params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
+      if (
+        history_manager_.hasPotentialToReachWithHistory(
+          mutable_object, edge_points.front_center_point, edge_points.front_right_point,
+          edge_points.front_left_point, params_.prediction_time_horizon * 2.0,
+          params_.min_crosswalk_user_velocity,
+          params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
         PredictedPath predicted_path = path_generator_->generatePathToTargetPoint(
           mutable_object, edge_points.front_center_point);
         predicted_path.confidence = 1.0;
         predicted_object.kinematics.predicted_paths.push_back(predicted_path);
       }
 
-      if (history_manager_.hasPotentialToReachWithHistory(
-            mutable_object, edge_points.back_center_point, edge_points.back_right_point,
-            edge_points.back_left_point, params_.prediction_time_horizon * 2.0,
-            params_.min_crosswalk_user_velocity,
-            params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
+      if (
+        history_manager_.hasPotentialToReachWithHistory(
+          mutable_object, edge_points.back_center_point, edge_points.back_right_point,
+          edge_points.back_left_point, params_.prediction_time_horizon * 2.0,
+          params_.min_crosswalk_user_velocity,
+          params_.max_crosswalk_user_delta_yaw_threshold_for_lanelet, true)) {
         PredictedPath predicted_path =
           path_generator_->generatePathToTargetPoint(mutable_object, edge_points.back_center_point);
         predicted_path.confidence = 1.0;
@@ -386,6 +391,13 @@ PredictedObject PredictorVru::getPredictedObjectAsCrosswalkUser(const TrackedObj
     }
     predicted_object.kinematics.predicted_paths.push_back(predicted_path);
   }
+
+  const auto is_crosswalk_signal_red = [this](const lanelet::ConstLanelet & crosswalk) {
+    return params_.use_crosswalk_signal && traffic_signal_module_.isRedSignal(crosswalk);
+  };
+  predicted_object.kinematics.predicted_paths =
+    road_boundary_module_.cut_paths_crossing_road_boundary(
+      predicted_object, within_road, is_crosswalk_signal_red);
 
   const auto n_path = predicted_object.kinematics.predicted_paths.size();
   for (auto & predicted_path : predicted_object.kinematics.predicted_paths) {
