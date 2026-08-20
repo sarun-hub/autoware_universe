@@ -331,8 +331,8 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
     const auto & base_pose0 = path.compute(temp_default_stopline).point.pose;
     const auto path_footprint0 =
       autoware_utils::transform_vector(local_footprint, autoware_utils::pose2transform(base_pose0));
-    if (bg::intersects(
-          path_footprint0, lanelet::utils::to2D(first_attention_area).basicPolygon())) {
+    if (
+      bg::intersects(path_footprint0, lanelet::utils::to2D(first_attention_area).basicPolygon())) {
       return std::nullopt;
     }
     return std::clamp(

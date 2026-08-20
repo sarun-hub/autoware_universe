@@ -447,9 +447,10 @@ DecisionResult IntersectionModule::modifyPathVelocityDetail(
     if (
       has_collision_with_margin && !has_traffic_light_ && enable_conservative_yield_merging &&
       intersection_stoplines.maximum_footprint_overshoot_line) {
-      if (can_smoothly_stop_at(
-            closest_s, intersection_stoplines.maximum_footprint_overshoot_line.value(),
-            planner_data)) {
+      if (
+        can_smoothly_stop_at(
+          closest_s, intersection_stoplines.maximum_footprint_overshoot_line.value(),
+          planner_data)) {
         // NOTE(soblin): intersection_stoplines.maximum_footprint_overshoot_line.value() is not used
         // as stop line. in this case, ego tries to stop at current position
         return NonOccludedCollisionStop{closest_s, closest_s, occlusion_stopline_s, occlusion_diag};
