@@ -94,6 +94,11 @@ void retrievePathsBackward(
 }
 }  // namespace
 
+double round_value_up(const double & value, const double ds)
+{
+  return std::ceil(value / ds) * ds;
+}
+
 std::vector<lanelet::CompoundPolygon3d> getPolygon3dFromLanelets(
   const lanelet::ConstLanelets & lanelets)
 {
@@ -285,7 +290,7 @@ std::optional<double> getFirstIndexInsidePolygonByFootprint(
   const lanelet::CompoundPolygon3d & polygon, const autoware_utils::LinearRing2d & footprint,
   const double vehicle_length)
 {
-  const auto start_s = std::max(0.0, interval.start - vehicle_length);
+  const auto start_s = std::max(0.0, interval.start - round_value_up(vehicle_length));
   const auto cropped_path = autoware::experimental::trajectory::crop(path, start_s, interval.end);
 
   const auto first_index = autoware::experimental::trajectory::find_first_index_if(
@@ -304,7 +309,7 @@ std::optional<FirstIndexInsidePolygons> getFirstIndexInsidePolygonsByFootprint(
   const lanelet::CompoundPolygons3d & polygons, const autoware_utils::LinearRing2d & footprint,
   const double vehicle_length)
 {
-  const auto start_s = std::max(0.0, interval.start - vehicle_length);
+  const auto start_s = std::max(0.0, interval.start - round_value_up(vehicle_length));
   const auto cropped_path = autoware::experimental::trajectory::crop(path, start_s, interval.end);
 
   const auto find_polygon_it = [&polygons, &footprint](const PathPointWithLaneId & p) {

@@ -47,6 +47,8 @@ struct MergedLanelets
   std::vector<lanelet::ConstLanelets> originals;
 };
 
+double round_value_up(const double & value, const double ds = 0.1);
+
 std::vector<lanelet::CompoundPolygon3d> getPolygon3dFromLanelets(
   const lanelet::ConstLanelets & lanelets);
 

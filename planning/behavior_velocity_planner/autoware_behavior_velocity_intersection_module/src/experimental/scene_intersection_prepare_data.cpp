@@ -27,6 +27,7 @@
 #include <lanelet2_core/geometry/Lanelet.h>
 
 #include <algorithm>
+#include <limits>
 #include <set>
 #include <string>
 #include <utility>
@@ -34,6 +35,35 @@
 
 namespace autoware::behavior_velocity_planner::experimental
 {
+static double findClosestIndex(
+  const Trajectory & path, const geometry_msgs::msg::Pose & pose, const PlannerData & planner_data)
+{
+  // 1. Distance + yaw constraint
+  if (
+    const auto s = autoware::experimental::trajectory::find_first_nearest_index(
+      path, pose, planner_data.ego_nearest_dist_threshold,
+      planner_data.ego_nearest_yaw_threshold)) {
+    return s.value();
+  }
+
+  // 2. Distance constraint only
+  if (
+    const auto s = autoware::experimental::trajectory::find_first_nearest_index(
+      path, pose, planner_data.ego_nearest_dist_threshold)) {
+    return s.value();
+  }
+
+  // 3. Yaw constraint only
+  if (
+    const auto s = autoware::experimental::trajectory::find_first_nearest_index(
+      path, pose, std::numeric_limits<double>::max(), planner_data.ego_nearest_yaw_threshold)) {
+    return s.value();
+  }
+
+  // 4. Position only
+  return autoware::experimental::trajectory::find_nearest_index(path, pose.position);
+}
+
 namespace bg = boost::geometry;
 
 Result<IntersectionModule::BasicData, InternalError> IntersectionModule::prepareIntersectionData(
@@ -193,14 +223,9 @@ std::optional<double> IntersectionModule::getStopLineIndexFromMap(
   stop_point_from_map.position.y = 0.5 * (p_start.y() + p_end.y());
   stop_point_from_map.position.z = 0.5 * (p_start.z() + p_end.z());
 
-  const auto stop_s = autoware::experimental::trajectory::find_first_nearest_index(
-    path, stop_point_from_map, planner_data.ego_nearest_dist_threshold,
-    planner_data.ego_nearest_yaw_threshold);
-  if (stop_s) {
-    return stop_s.value();
-  }
+  const auto stop_s = findClosestIndex(path, stop_point_from_map, planner_data);
 
-  return autoware::experimental::trajectory::find_nearest_index(path, stop_point_from_map.position);
+  return stop_s;
 }
 
 std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionStopLines(
@@ -240,32 +265,26 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
     planner_data.current_acceleration->accel.accel.linear.x, planner_param_.common.max_accel,
     planner_param_.common.max_jerk, 0.0);
   intersection_stoplines.pass_judge_line = std::clamp(
-    intersection_stoplines.first_attention_stopline - braking_dist -
-      planner_param_.common.pass_judge_line_margin,
+    intersection_stoplines.first_attention_stopline - util::round_value_up(braking_dist) -
+      util::round_value_up(planner_param_.common.pass_judge_line_margin),
     0.0, path.length());
 
   // (3) ego front stop line position on interpolated path
   const auto & current_pose = planner_data.current_odometry->pose;
-  const auto closest_s_opt = autoware::experimental::trajectory::find_first_nearest_index(
-    path, current_pose, planner_data.ego_nearest_dist_threshold,
-    planner_data.ego_nearest_yaw_threshold);
-  if (closest_s_opt) {
-    intersection_stoplines.closest_s = closest_s_opt.value();
-  } else {
-    intersection_stoplines.closest_s =
-      autoware::experimental::trajectory::find_nearest_index(path, current_pose.position);
-  }
+
+  intersection_stoplines.closest_s = findClosestIndex(path, current_pose, planner_data);
 
   // (4) default stop line position on interpolated path
   intersection_stoplines.default_stopline = [&]() -> std::optional<double> {
     const auto map_stop_s = getStopLineIndexFromMap(
       path, left_bound, right_bound, lane_id_interval, assigned_lanelet, planner_data);
-    double default_stopline_s = 0.0;
+    double default_stopline_s = -1.0;
     if (map_stop_s) {
-      default_stopline_s = map_stop_s.value() - baselink2front;
+      default_stopline_s = map_stop_s.value() - util::round_value_up(baselink2front);
     }
-    if (default_stopline_s <= 0) {
-      default_stopline_s = intersection_stoplines.first_attention_stopline - stopline_margin;
+    if (default_stopline_s < 0) {
+      default_stopline_s =
+        intersection_stoplines.first_attention_stopline - util::round_value_up(stopline_margin);
     }
     if (default_stopline_s < 0) {
       return std::nullopt;
@@ -277,14 +296,8 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
   intersection_stoplines.collision_stopline = [&]() -> std::optional<double> {
     if (previous_stop_pose.collision_stopline_pose) {
       const auto previous_stop_pose_s =
-        autoware::experimental::trajectory::find_first_nearest_index(
-          path, previous_stop_pose.collision_stopline_pose.value(),
-          planner_data.ego_nearest_dist_threshold, planner_data.ego_nearest_yaw_threshold);
-      if (previous_stop_pose_s) {
-        return previous_stop_pose_s.value();
-      }
-      return autoware::experimental::trajectory::find_nearest_index(
-        path, previous_stop_pose.collision_stopline_pose.value().position);
+        findClosestIndex(path, previous_stop_pose.collision_stopline_pose.value(), planner_data);
+      return previous_stop_pose_s;
     }
     if (!intersection_stoplines.default_stopline) {
       return std::nullopt;
@@ -300,20 +313,15 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
     // default stop line is infeasible
     if (intersection_stoplines.closest_s < intersection_stoplines.pass_judge_line) {
       // but ego is still before pass judge line
-      return std::clamp(intersection_stoplines.closest_s + braking_dist, 0.0, path.length());
+      return std::clamp(
+        intersection_stoplines.closest_s + util::round_value_up(braking_dist), 0.0, path.length());
     }
     if (previous_stop_pose.occlusion_peeking_stopline_pose) {
       // NOTE(soblin): see IntersectionModule::isOverPassJudgeLinesStatus. during peeking, ego can
       // pass original pass judge line
-      const auto previous_stop_pose_s =
-        autoware::experimental::trajectory::find_first_nearest_index(
-          path, previous_stop_pose.occlusion_peeking_stopline_pose.value(),
-          planner_data.ego_nearest_dist_threshold, planner_data.ego_nearest_yaw_threshold);
-      if (previous_stop_pose_s) {
-        return previous_stop_pose_s.value();
-      }
-      return autoware::experimental::trajectory::find_nearest_index(
-        path, previous_stop_pose.occlusion_peeking_stopline_pose.value().position);
+      const auto previous_stop_pose_s = findClosestIndex(
+        path, previous_stop_pose.occlusion_peeking_stopline_pose.value(), planner_data);
+      return previous_stop_pose_s;
     }
     // ego is over pass judge line
     return intersection_stoplines.first_attention_stopline;
@@ -334,21 +342,16 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
       return std::nullopt;
     }
     return std::clamp(
-      intersection_stoplines.first_attention_stopline + peeking_offset, 0.0, path.length());
+      intersection_stoplines.first_attention_stopline + util::round_value_up(peeking_offset), 0.0,
+      path.length());
   }();
 
   // dynamic position
   intersection_stoplines.occlusion_peeking_stopline = [&]() -> std::optional<double> {
     if (previous_stop_pose.occlusion_peeking_stopline_pose) {
-      const auto previous_stop_pose_s =
-        autoware::experimental::trajectory::find_first_nearest_index(
-          path, previous_stop_pose.occlusion_peeking_stopline_pose.value(),
-          planner_data.ego_nearest_dist_threshold, planner_data.ego_nearest_yaw_threshold);
-      if (previous_stop_pose_s) {
-        return previous_stop_pose_s.value();
-      }
-      return autoware::experimental::trajectory::find_nearest_index(
-        path, previous_stop_pose.occlusion_peeking_stopline_pose.value().position);
+      const auto previous_stop_pose_s = findClosestIndex(
+        path, previous_stop_pose.occlusion_peeking_stopline_pose.value(), planner_data);
+      return previous_stop_pose_s;
     }
     if (!static_occlusion_peeking_line_s) {
       return std::nullopt;
@@ -364,7 +367,8 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
     // static stop line is infeasible
     if (intersection_stoplines.closest_s < intersection_stoplines.pass_judge_line) {
       // but ego is still before pass judge line
-      return std::clamp(intersection_stoplines.closest_s + braking_dist, 0.0, path.length());
+      return std::clamp(
+        intersection_stoplines.closest_s + util::round_value_up(braking_dist), 0.0, path.length());
     }
     // ego is over pass judge line
     return intersection_stoplines.first_attention_stopline;
@@ -379,13 +383,16 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
       // first_conflicting_area, this could be null.
       // ==========================================================================================
       const auto stuck_stopline_s_opt = util::getFirstIndexInsidePolygonByFootprint(
-        path, lane_id_interval, first_conflicting_area, local_footprint, baselink2front);
+        path, lane_id_interval, first_conflicting_area, local_footprint,
+        util::round_value_up(baselink2front));
       if (!stuck_stopline_s_opt) {
         return std::nullopt;
       }
-      stuck_stopline_s = stuck_stopline_s_opt.value() - 0.2 - stopline_margin;
+      stuck_stopline_s =
+        std::max(stuck_stopline_s_opt.value() - 0.1, 0.0) - util::round_value_up(stopline_margin);
     } else {
-      stuck_stopline_s = lane_id_interval.start - (stopline_margin + baselink2front);
+      stuck_stopline_s = lane_id_interval.start - (util::round_value_up(stopline_margin) +
+                                                   util::round_value_up(baselink2front));
     }
     if (stuck_stopline_s < 0.0) {
       return std::nullopt;
@@ -407,14 +414,12 @@ std::optional<IntersectionStopLines> IntersectionModule::generateIntersectionSto
     compute_lane_end_azimuth(assigned_lanelet) - compute_lane_end_azimuth(first_attention_lane));
   const bool is_merging = std::fabs(merging_angle_diff) <
                           planner_param_.conservative_merging.merging_judge_angle_threshold;
-  const std::optional<double> maximum_footprint_overshoot_line_s_opt =
+  intersection_stoplines.maximum_footprint_overshoot_line =
     is_merging
       ? util::findMaximumFootprintOvershootPosition(
           path, local_footprint, first_attention_lane,
           planner_param_.conservative_merging.minimum_lateral_distance_threshold, turn_direction)
       : std::nullopt;
-  intersection_stoplines.maximum_footprint_overshoot_line =
-    maximum_footprint_overshoot_line_s_opt.value_or(0.0);
 
   return intersection_stoplines;
 }

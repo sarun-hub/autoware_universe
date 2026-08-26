@@ -170,8 +170,8 @@ bool MergeFromPrivateRoadModule::modifyPathVelocity(
   // to subtract baselink2front/ds here
   // ==========================================================================================
   const auto stopline_s = std::max<double>(
-    0.0, first_conflicting_idx_opt.value() -
-           planner_param_.stopline_margin / planner_param_.path_interpolation_ds);
+    0.0,
+    first_conflicting_idx_opt.value() - 0.1 - util::round_value_up(planner_param_.stopline_margin));
 
   debug_data_.virtual_wall_pose = path.compute(stopline_s + baselink2front).point.pose;
   debug_data_.stop_point_pose = path.compute(stopline_s).point.pose;

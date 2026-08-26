@@ -37,6 +37,7 @@
 #include <lanelet2_core/geometry/Lanelet.h>
 
 #include <algorithm>
+#include <limits>
 #include <list>
 #include <memory>
 #include <string>
@@ -46,6 +47,35 @@
 namespace autoware::behavior_velocity_planner::experimental
 {
 namespace bg = boost::geometry;
+
+static double findClosestIndex(
+  const Trajectory & path, const geometry_msgs::msg::Pose & pose, const PlannerData & planner_data)
+{
+  // 1. Distance + yaw constraint
+  if (
+    const auto s = autoware::experimental::trajectory::find_first_nearest_index(
+      path, pose, planner_data.ego_nearest_dist_threshold,
+      planner_data.ego_nearest_yaw_threshold)) {
+    return s.value();
+  }
+
+  // 2. Distance constraint only
+  if (
+    const auto s = autoware::experimental::trajectory::find_first_nearest_index(
+      path, pose, planner_data.ego_nearest_dist_threshold)) {
+    return s.value();
+  }
+
+  // 3. Yaw constraint only
+  if (
+    const auto s = autoware::experimental::trajectory::find_first_nearest_index(
+      path, pose, std::numeric_limits<double>::max(), planner_data.ego_nearest_yaw_threshold)) {
+    return s.value();
+  }
+
+  // 4. Position only
+  return autoware::experimental::trajectory::find_nearest_index(path, pose.position);
+}
 
 bool IntersectionModule::isTargetCollisionVehicleType(
   const autoware_perception_msgs::msg::PredictedObject & object) const
@@ -813,26 +843,16 @@ IntersectionModule::TimeDistanceArray IntersectionModule::calcIntersectionPassin
 
   // NOTE: `reference_path` is resampled in `reference_smoothed_path`, so
   // `last_intersection_stopline_candidate_idx` makes no sense
-  const auto smoothed_closest_s =
-    autoware::experimental::trajectory::find_first_nearest_index(
-      smoothed_reference_path, planner_data.current_odometry->pose,
-      planner_data.ego_nearest_dist_threshold, planner_data.ego_nearest_yaw_threshold)
-      .value_or(
-        autoware::experimental::trajectory::find_nearest_index(
-          smoothed_reference_path, planner_data.current_odometry->pose.position));
+  const auto smoothed_closest_s = findClosestIndex(
+    smoothed_reference_path, smoothed_reference_path.compute(closest_s).point.pose, planner_data);
 
   const auto smoothed_upstream_stopline_s = [&]() -> std::optional<double> {
     if (!upstream_stopline_s.has_value()) {
       return std::nullopt;
     }
     const auto upstream_stopline_point =
-      reference_path.compute(upstream_stopline_s.value()).point.pose;
-    return autoware::experimental::trajectory::find_first_nearest_index(
-             smoothed_reference_path, upstream_stopline_point,
-             planner_data.ego_nearest_dist_threshold, planner_data.ego_nearest_yaw_threshold)
-      .value_or(
-        autoware::experimental::trajectory::find_nearest_index(
-          smoothed_reference_path, upstream_stopline_point.position));
+      smoothed_reference_path.compute(upstream_stopline_s.value()).point.pose;
+    return findClosestIndex(smoothed_reference_path, upstream_stopline_point, planner_data);
   }();
 
   auto smoothed_bases = smoothed_reference_path.get_underlying_bases();
