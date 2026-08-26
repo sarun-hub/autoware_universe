@@ -857,10 +857,10 @@ IntersectionModule::TimeDistanceArray IntersectionModule::calcIntersectionPassin
 
   auto smoothed_bases = smoothed_reference_path.get_underlying_bases();
   smoothed_bases.erase(
-    std::find_if(
-      smoothed_bases.begin(), smoothed_bases.end(),
-      [&](const double & s) { return s >= smoothed_closest_s; }),
-    smoothed_bases.end());
+    smoothed_bases.begin(),
+    std::find_if(smoothed_bases.begin(), smoothed_bases.end(), [&](const double & s) {
+      return s >= smoothed_closest_s;
+    }));
 
   for (auto it = smoothed_bases.begin(); it != std::prev(smoothed_bases.end()); ++it) {
     const auto & p1 = smoothed_reference_path.compute(*it);
