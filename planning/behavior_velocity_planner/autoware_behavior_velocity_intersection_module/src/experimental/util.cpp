@@ -193,7 +193,12 @@ std::optional<autoware::experimental::trajectory::Interval> findLaneIdsInterval(
   if (intervals.empty()) {
     return std::nullopt;
   }
-  return intervals.front();
+
+  const auto & [start_s, end_s] = intervals.front();
+  // has some more interval offset
+  const autoware::experimental::trajectory::Interval & lane_id_interval{
+    std::max(start_s - 0.1, 0.0), std::min(end_s + 0.1, path.length())};
+  return lane_id_interval;
 }
 
 std::optional<double> getFirstIndexInsidePolygon(

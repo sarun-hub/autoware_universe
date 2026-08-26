@@ -99,11 +99,11 @@ static std::optional<lanelet::ConstLanelet> getFirstConflictingLanelet(
   const autoware::experimental::trajectory::Interval & lane_ids_interval,
   const autoware_utils::LinearRing2d & footprint, const double vehicle_length)
 {
-  static constexpr auto ds = 0.2;
+  static constexpr auto ds = 0.1;
   const auto start = std::max<double>(0.0, lane_ids_interval.start - vehicle_length);
 
   // start from beginning of the Trajectory
-  for (const auto s : path.base_arange({start, lane_ids_interval.end}, ds)) {
+  for (const auto s : path.base_arange({start, lane_ids_interval.end}, ds, false)) {
     const auto & pose = path.compute(s).point.pose;
     const auto path_footprint =
       autoware_utils::transform_vector(footprint, autoware_utils::pose2transform(pose));
@@ -146,13 +146,14 @@ bool MergeFromPrivateRoadModule::modifyPathVelocity(
     RCLCPP_DEBUG(logger_, "===== plan end =====");
     return false;
   }
+  const auto & lane_id_interval = lane_ids_interval_opt.value();
 
   const double baselink2front = planner_data.vehicle_info_.max_longitudinal_offset_m;
   const auto local_footprint = planner_data.vehicle_info_.createFootprint(0.0, 0.0);
   if (!first_conflicting_lanelet_) {
     const auto conflicting_lanelets = getAttentionLanelets(planner_data);
     first_conflicting_lanelet_ = getFirstConflictingLanelet(
-      conflicting_lanelets, path, *lane_ids_interval_opt, local_footprint, baselink2front);
+      conflicting_lanelets, path, lane_id_interval, local_footprint, baselink2front);
   }
   if (!first_conflicting_lanelet_) {
     return false;
@@ -160,8 +161,7 @@ bool MergeFromPrivateRoadModule::modifyPathVelocity(
   const auto first_conflicting_lanelet = first_conflicting_lanelet_.value();
 
   const auto first_conflicting_idx_opt = util::getFirstIndexInsidePolygonByFootprint(
-    path, *lane_ids_interval_opt, first_conflicting_lanelet.polygon3d(), local_footprint,
-    baselink2front);
+    path, lane_id_interval, first_conflicting_lanelet.polygon3d(), local_footprint, baselink2front);
   if (!first_conflicting_idx_opt) {
     return false;
   }
