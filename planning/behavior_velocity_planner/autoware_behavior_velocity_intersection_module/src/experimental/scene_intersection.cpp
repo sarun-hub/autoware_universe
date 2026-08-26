@@ -1089,7 +1089,7 @@ void reactRTCApprovalByDecisionResult(
 
   // NOTE: creep_velocity should be inserted first at closest_idx if !rtc_default_approved
   if (!rtc_occlusion_approved && decision_result.occlusion_stop_tolerable) {
-    const size_t occlusion_peeking_stopline_s = decision_result.occlusion_stopline_s;
+    const double occlusion_peeking_stopline_s = decision_result.occlusion_stopline_s;
     path.longitudinal_velocity_mps().range(occlusion_peeking_stopline_s, path.length()).set(0.0);
 
     const auto stop_pose = path.compute(occlusion_peeking_stopline_s).point.pose;
