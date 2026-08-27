@@ -1475,7 +1475,8 @@ IntersectionModule::PassJudgeStatus IntersectionModule::isOverPassJudgeLinesStat
       if (passed_judge_line_while_peeking_) {
         return occlusion_stopline_s;
       }
-      const auto is_over_original_pass_judge_line = closest_s > original_pass_judge_line_s;
+      const auto is_over_original_pass_judge_line =
+        util::isOverTargetIndex(path, closest_s, current_pose, original_pass_judge_line_s);
       if (is_occlusion_state && is_over_original_pass_judge_line) {
         passed_judge_line_while_peeking_ = true;
         return occlusion_stopline_s;
@@ -1508,7 +1509,8 @@ IntersectionModule::PassJudgeStatus IntersectionModule::isOverPassJudgeLinesStat
     return false;
   }();
 
-  const auto is_over_pass_judge_line = closest_s > pass_judge_line_s;
+  const auto is_over_pass_judge_line =
+    util::isOverTargetIndex(path, closest_s, current_pose, pass_judge_line_s);
   bool safely_passed_judge_line_first_time = false;
   if (is_over_pass_judge_line && was_safe && !safely_passed_judge_line_time_) {
     safely_passed_judge_line_time_ = std::make_pair(clock_->now(), current_pose);
