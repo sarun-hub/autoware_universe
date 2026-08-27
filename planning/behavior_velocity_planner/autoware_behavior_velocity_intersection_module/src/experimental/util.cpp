@@ -14,6 +14,7 @@
 
 #include "autoware/behavior_velocity_intersection_module/experimental/util.hpp"
 
+#include <autoware/behavior_velocity_planner_common/utilization/util.hpp>
 #include <autoware/lanelet2_utils/conversion.hpp>
 #include <autoware/lanelet2_utils/geometry.hpp>
 #include <autoware/lanelet2_utils/nn_search.hpp>
@@ -134,6 +135,17 @@ double getHighestCurvature(const lanelet::ConstLineString3d & centerline)
     autoware::experimental::trajectory::Trajectory<geometry_msgs::msg::Point>::Builder{}.build(
       points);
   return autoware::experimental::trajectory::max_curvature(trajectory.value());
+}
+
+bool isOverTargetIndex(
+  const Trajectory & path, const double closest_s, const geometry_msgs::msg::Pose & current_pose,
+  const double target_s)
+{
+  if (std::fabs(closest_s - target_s) < std::numeric_limits<double>::epsilon()) {
+    const geometry_msgs::msg::Pose target_pose = path.compute(target_s).point.pose;
+    return planning_utils::isAheadOf(current_pose, target_pose);
+  }
+  return static_cast<bool>(closest_s > target_s);
 }
 
 std::optional<autoware_utils::Polygon2d> getIntersectionArea(

@@ -57,6 +57,10 @@ lanelet::ConstLanelets getPrevLanelets(
 
 double getHighestCurvature(const lanelet::ConstLineString3d & centerline);
 
+bool isOverTargetIndex(
+  const Trajectory & path, const double closest_s, const geometry_msgs::msg::Pose & current_pose,
+  const double target_s);
+
 std::optional<autoware_utils::Polygon2d> getIntersectionArea(
   const lanelet::ConstLanelet & assigned_lane, const lanelet::LaneletMapConstPtr lanelet_map_ptr);
 
