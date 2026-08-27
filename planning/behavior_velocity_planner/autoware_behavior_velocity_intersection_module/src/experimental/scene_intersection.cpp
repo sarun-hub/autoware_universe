@@ -556,7 +556,7 @@ DecisionResult IntersectionModule::modifyPathVelocityDetail(
   if (!stopped_at_default_line_or_passed) {
     if (can_smoothly_stop_at(closest_s, default_stopline_s, planner_data)) {
       return FirstWaitBeforeOcclusion{
-        is_occlusion_cleared_with_margin, closest_s, collision_stopline_s, occlusion_stopline_s,
+        is_occlusion_cleared_with_margin, closest_s, default_stopline_s, occlusion_stopline_s,
         occlusion_diag};
     }
     RCLCPP_WARN_THROTTLE(
