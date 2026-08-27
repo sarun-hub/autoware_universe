@@ -58,8 +58,14 @@ bool isPointInsidePolygonByFootprint(
 {
   const auto path_footprint =
     autoware_utils::transform_vector(footprint, autoware_utils::pose2transform(point.point.pose));
+  const auto footprint_front_part = autoware_utils_geometry::LineString2d{
+    path_footprint.at(vehicle_info_utils::VehicleInfo::FrontLeftIndex),
+    path_footprint.at(vehicle_info_utils::VehicleInfo::FrontRightIndex)};
+
   const auto basic_polygon = polygon.basicPolygon();
-  return bg::intersects(path_footprint, basic_polygon);
+  // required within because footprint_front_part is not full LinearRing2d
+  return bg::intersects(footprint_front_part, basic_polygon) ||
+         bg::within(footprint_front_part, basic_polygon);
 }
 
 void retrievePathsBackward(
