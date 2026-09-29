@@ -18,17 +18,32 @@
 #include "autoware/ptv3/ptv3_trt.hpp"
 #include "autoware/ptv3/visibility_control.hpp"
 
+#include <Eigen/Geometry>
 #include <autoware_utils/ros/debug_publisher.hpp>
 #include <autoware_utils/ros/published_time_publisher.hpp>
 #include <autoware_utils/system/stop_watch.hpp>
 #include <cuda_blackboard/cuda_blackboard_publisher.hpp>
 #include <cuda_blackboard/cuda_blackboard_subscriber.hpp>
 #include <cuda_blackboard/cuda_pointcloud2.hpp>
+#include <perception_utils/detection_class_remapper.hpp>
+#include <perception_utils/iou_bev_nms.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <tf2_eigen/tf2_eigen.hpp>
 
+#include <autoware_perception_msgs/msg/detected_objects.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/header.hpp>
 
+#include <tf2/exceptions.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+
+#include <chrono>
+#include <cstdint>
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace autoware::ptv3
 {
@@ -47,6 +62,13 @@ public:
 
 private:
   void cloudCallback(const std::shared_ptr<const cuda_blackboard::CudaPointCloud2> & msg_ptr);
+  /// World-to-lidar transform at the frame stamp, or nothing when TF cannot provide it.
+  std::optional<Eigen::Affine3f> lookupWorldToLidar(const std_msgs::msg::Header & header) const;
+
+  // Densification is optional: without past frames no sweep is ever transformed, so the TF
+  // buffer and its listener thread are never created.
+  std::optional<tf2_ros::Buffer> tf_buffer_;
+  std::optional<tf2_ros::TransformListener> tf_listener_;
 
   std::unique_ptr<cuda_blackboard::CudaBlackboardSubscriber<cuda_blackboard::CudaPointCloud2>>
     pointcloud_sub_;
@@ -60,9 +82,19 @@ private:
   std::unique_ptr<cuda_blackboard::CudaBlackboardPublisher<cuda_blackboard::CudaPointCloud2>>
     filtered_pointcloud_pub_;
 
+  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
+    detected_objects_pub_;
+
   std::unique_ptr<PTv3TRT> model_ptr_{nullptr};
 
   rclcpp::TimerBase::SharedPtr timer_{nullptr};
+
+  perception_utils::IouBevNms iou_bev_nms_;
+  perception_utils::DetectionClassRemapper detection_class_remapper_;
+  std::vector<std::string> detection_class_names_;
+  bool has_twist_{false};
+  std::string densification_world_frame_id_;
+  std::int64_t densification_num_past_frames_{0};
 
   // debugger
   std::unique_ptr<autoware_utils::StopWatch<std::chrono::milliseconds>> stop_watch_ptr_{nullptr};
