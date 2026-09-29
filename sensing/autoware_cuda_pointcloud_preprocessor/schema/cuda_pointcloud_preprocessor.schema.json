@@ -56,13 +56,13 @@
         },
         "max_twist_frequency_hz": {
           "type": "number",
-          "description": "Maximum expected twist input frequency. Used with twist_imu_queue_window_sec to bound the twist queue.",
+          "description": "Maximum expected twist input frequency. Used to bound the twist queue.",
           "default": 200.0,
           "exclusiveMinimum": 0.0
         },
         "max_imu_frequency_hz": {
           "type": "number",
-          "description": "Maximum expected IMU input frequency. Used with twist_imu_queue_window_sec to bound the IMU queue.",
+          "description": "Maximum expected IMU input frequency. Used to bound the IMU queue.",
           "default": 200.0,
           "exclusiveMinimum": 0.0
         },
