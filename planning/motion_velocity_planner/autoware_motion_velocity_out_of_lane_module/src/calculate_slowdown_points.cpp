@@ -78,8 +78,9 @@ std::optional<geometry_msgs::msg::Pose> calculate_pose_ahead_of_collision(
        l -= precision) {
     const auto interpolated_pose =
       motion_utils::calcInterpolatedPose(ego_data.trajectory_points, l);
-    if (autoware::experimental::trajectory::crossed_with_footprint(
-          interpolated_pose, point_to_avoid.out_overlaps, footprint))
+    if (
+      autoware::experimental::trajectory::crossed_with_footprint(
+        interpolated_pose, point_to_avoid.out_overlaps, footprint))
       return interpolated_pose;
   }
   return std::nullopt;
